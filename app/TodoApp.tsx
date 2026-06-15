@@ -138,7 +138,7 @@ export default function TodoApp({ initialTodos }: TodoAppProps) {
     <div className="flex min-h-full flex-1 flex-col items-center bg-gray-100 px-4 py-14 font-sans sm:px-6 sm:py-20">
       <main className="flex w-full max-w-lg flex-col gap-12">
         <h1 className="text-center text-4xl font-bold tracking-tight text-emerald-800 sm:text-5xl">
-          ToDo リスト
+          🚀 ToDo リスト
         </h1>
 
         {/* 入力欄と追加ボタン */}
