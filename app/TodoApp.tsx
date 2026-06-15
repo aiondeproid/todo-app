@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { Todo } from "@/lib/types";
 
@@ -11,6 +12,7 @@ type TodoAppProps = {
 };
 
 export default function TodoApp({ initialTodos }: TodoAppProps) {
+  const router = useRouter();
   const [input, setInput] = useState("");
   const [inputError, setInputError] = useState(false);
   const [todos, setTodos] = useState<Todo[]>(initialTodos);
@@ -36,6 +38,18 @@ export default function TodoApp({ initialTodos }: TodoAppProps) {
     return () => clearTimeout(id);
   }, [toastTick]);
 
+  // Supabase から最新の一覧を取得して画面を再描画する（RLS が user_id を自動フィルタ）
+  const refreshTodos = async () => {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("todos")
+      .select("id, title, completed, created_at")
+      .order("created_at", { ascending: false });
+
+    if (error || !data) return;
+    setTodos(data);
+  };
+
   const handleAdd = async () => {
     const trimmed = input.trim();
     if (trimmed === "") {
@@ -46,9 +60,18 @@ export default function TodoApp({ initialTodos }: TodoAppProps) {
     setInputError(false);
 
     const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      router.push("/login");
+      return;
+    }
+
     const { data, error } = await supabase
       .from("todos")
-      .insert({ title: trimmed })
+      .insert({ title: trimmed, user_id: user.id })
       .select("id, title, completed, created_at")
       .single();
 
@@ -78,10 +101,19 @@ export default function TodoApp({ initialTodos }: TodoAppProps) {
 
     if (error) return;
 
-    setTodos((prev) =>
-      prev.map((t) => (t.id === editingId ? { ...t, title: trimmed } : t))
-    );
     setEditingId(null);
+    await refreshTodos();
+  };
+
+  const handleToggleCompleted = async (todo: Todo) => {
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("todos")
+      .update({ completed: !todo.completed })
+      .eq("id", todo.id);
+
+    if (error) return;
+    await refreshTodos();
   };
 
   const cancelEdit = () => {
@@ -196,8 +228,18 @@ export default function TodoApp({ initialTodos }: TodoAppProps) {
                       </button>
                     </div>
                   ) : (
-                    // 表示モード: テキスト + 編集・削除ボタン
-                    <div className="flex items-center gap-2">
+                    // 表示モード: チェックボックス + テキスト + 編集・削除ボタン
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="checkbox"
+                        checked={todo.completed}
+                        onChange={() => void handleToggleCompleted(todo)}
+                        disabled={editingId !== null}
+                        aria-label={
+                          todo.completed ? "未完了に戻す" : "完了にする"
+                        }
+                        className="h-4 w-4 shrink-0 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 disabled:cursor-not-allowed disabled:opacity-30"
+                      />
                       <span
                         className={`flex-1 break-words ${
                           todo.completed
